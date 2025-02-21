@@ -71,7 +71,8 @@ def overlay_text(text, timeout=2000):
         root.after(timeout, root.destroy)
         root.mainloop()
 
-    # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버래이를 유지할 수 있음.
+    # 내부적으로 쓰레드를 통해 오버레이를 띄움. timeout 시간동안 프로그램이 멈추던 것을 해결. 이제 오버레이가 떠있는 중간에도 프로그램이 동작함.
+    # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버레이를 유지할 수 있음.
     th = Thread(target=make_overlay, args=(text, timeout), daemon=True)
     th.start()
     return th
