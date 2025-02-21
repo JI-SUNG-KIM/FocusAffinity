@@ -20,7 +20,8 @@ def change_affinity(process):
     }}
     """
 
-    subprocess.run(["powershell", "-Command", command])
+    # 여기 shell=True가 없으면 pythonw로 돌릴 때 0.1초 정도 검은 창이 떴다가 사라지면서 포커스를 explore.exe가 가져감.
+    subprocess.run(["powershell", "-Command", command], shell=True)
     overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
     print(f'"{process}" is now on CCD"{current_affinity_dict[process]}"')
 
@@ -33,6 +34,7 @@ def get_process_name():
 
 def kill(events):
     overlay_text('pause key detected. ending program', 1500)
+    print('pause key detected. ending program')
     os._exit(0)
 
 
@@ -51,11 +53,9 @@ def overlay_text(text, timeout=2000):
 
     # 창 크기 업데이트 후 실제 텍스트 크기 가져오기
     text_width = label.winfo_reqwidth()  # 라벨이 필요한 최소 너비
-    text_height = label.winfo_reqheight()  # 라벨이 필요한 최소 높이
 
     # 창 크기를 텍스트 크기에 맞게 조정 (여백 포함)
     window_width = text_width + 20  # 좌우 여백 추가
-    window_height = text_height + 20  # 상하 여백 추가
 
     # 화면 크기 가져오기
     screen_width = root.winfo_screenwidth()
@@ -73,6 +73,7 @@ def overlay_text(text, timeout=2000):
 
 # welcome message
 overlay_text('Change Core Affinity of focused program with "Scroll Lock".\nTerminate with "Pause" key', 4000)
+print('Change Core Affinity of focused program with "Scroll Lock".\nTerminate with "Pause" key')
 keyboard.hook_key('pause', callback=kill)
 
 while True:
