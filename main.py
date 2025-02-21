@@ -1,9 +1,10 @@
 import keyboard, win32gui, win32process, psutil, subprocess, os, tkinter as tk
-from threading import Thread, enumerate
+from threading import Thread
 
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
 current_affinity_dict = dict()
 
+# 프로세스의 CCD Affinity를 변경하는 함수
 def change_affinity(process):
     # 프로세스가 딕셔너리에 없으면 추가하고 2로 초기화
     if process not in current_affinity_dict:
@@ -24,8 +25,8 @@ def change_affinity(process):
     # 여기 shell=True가 없으면 pythonw로 돌릴 때 0.1초 정도 검은 창이 떴다가 사라지면서 포커스를 explore.exe가 가져감.
     subprocess.run(["powershell", "-Command", command], shell=True)
     overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
-    print(f'"{process}" is now on CCD"{current_affinity_dict[process]}"')
 
+# 현재 포커스된 프로세스의 이름을 가져오는 함수
 def get_process_name():
     handle = win32gui.GetForegroundWindow()
     tid, pid = win32process.GetWindowThreadProcessId(handle)
@@ -33,11 +34,10 @@ def get_process_name():
 
     return process_name
 
+# pause 키 후킹 시 호출되는 함수. 프로그램 종료
 def kill(events):
     overlay_text('pause key detected. ending program', 1500).join()
-    print('pause key detected. ending program')
     os._exit(0)
-
 
 def overlay_text(text, timeout=2000):
     def make_overlay(text, timeout):
@@ -75,12 +75,12 @@ def overlay_text(text, timeout=2000):
     # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버레이를 유지할 수 있음.
     th = Thread(target=make_overlay, args=(text, timeout), daemon=True)
     th.start()
+    print(text) # 매번 overlay_text랑 print랑 같이 써야하는게 귀찮아서 여기서 print도 같이 해줌.
     return th
 
 if __name__ == '__main__':
     # welcome message
-    overlay_text('Change Core Affinity of focused program with "Scroll Lock".\nTerminate with "Pause" key', 4000)
-    print('Change Core Affinity of focused program with "Scroll Lock".\nTerminate with "Pause" key')
+    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000)
 
     # pause 키 후킹. kill 함수 호출
     keyboard.hook_key('pause', callback=kill)
