@@ -6,7 +6,7 @@ current_affinity_dict = dict()
 # 부스트 클럭 플래그
 boost = False
 
-# 현재 포커스된 프로세스의 이름을 가져오는 함수
+# 현재 포커스된 프로세스의 이름을 반환
 def get_process_name():
     handle = win32gui.GetForegroundWindow()
     tid, pid = win32process.GetWindowThreadProcessId(handle)
@@ -14,7 +14,8 @@ def get_process_name():
 
     return process_name
 
-# 프로세스의 CCD Affinity를 변경하는 함수
+# called by 'scroll lock'
+# 프로세스의 CCD Affinity를 변경
 def change_affinity(process, show_overlay=True):
     # 프로세스가 딕셔너리에 없으면 추가하고 2로 초기화
     if process not in current_affinity_dict:
@@ -35,6 +36,7 @@ def change_affinity(process, show_overlay=True):
     if show_overlay:
         overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
+# called by 'shift+scroll lock'
 # power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
 def toggle_boost(events = None):
     global boost
@@ -46,7 +48,8 @@ def toggle_boost(events = None):
 
     boost = not boost
 
-# CCD Affinity 딕셔너리 출력
+# called by 'ctrl+shift+scroll lock'
+# CCD Affinity 딕셔너리 오버레이 출력
 def show_affinity_list(events = None):
     msg = "--------------------------------\nCurrent Affinity List\n"
     for key, value in current_affinity_dict.items():
@@ -56,6 +59,8 @@ def show_affinity_list(events = None):
     msg += '--------------------------------'
     overlay_text(msg, 5000, 1/30, 1/2)
 
+# called by 'shift+pause'
+# 모든 프로세스의 CCD Affinity를 초기화
 def reset_affinity(events = None):
     for key, value in current_affinity_dict.items():
         if value == 2:
@@ -66,7 +71,8 @@ def reset_affinity(events = None):
     overlay_text('All Affinity Reset', 1000).join()
     current_affinity_dict.clear()
 
-# pause 키 후킹 시 호출되는 함수. 프로그램 종료
+# called by 'pause'
+# 프로그램 종료
 def terminate(events = None):
     overlay_text('pause key detected. ending program', 1500).join()
     os._exit(0)
@@ -110,22 +116,17 @@ if __name__ == '__main__':
     # welcome message
     overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000).join()
 
-    # shift + scroll lock 후킹. toggle_boost 함수 호출
     keyboard.add_hotkey('shift+scroll lock', callback=toggle_boost)
-    # ctrl + shift + scroll lock 후킹. show_affinity_list 함수 호출
     keyboard.add_hotkey('ctrl+shift+scroll lock', callback=show_affinity_list)
-    # pause 키 후킹. terminate 함수 호출
     keyboard.add_hotkey('pause', callback=terminate)
-    # shift + pause 후킹. reset_affinity
     keyboard.add_hotkey('shift+pause', callback=reset_affinity)
 
     while True:
         keyboard.wait('scroll lock')
 
         current_process_name =  get_process_name()
-
+        change_affinity(current_process_name)
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
         if current_process_name == 'MuMuPlayer.exe':
-            change_affinity('MuMuVMMHeadless.exe')
-
-        change_affinity(current_process_name)
+            change_affinity('MuMuVMMHeadless.exe', False)
+            change_affinity('MuMuVMMSVC.exe', False)
