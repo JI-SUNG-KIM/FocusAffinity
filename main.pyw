@@ -33,10 +33,11 @@ def get_process_name():
     return process_name
 
 # pause 키 후킹 시 호출되는 함수. 프로그램 종료
-def kill(events):
+def terminate(events):
     overlay_text('pause key detected. ending program', 1500).join()
     os._exit(0)
 
+# 오버레이 텍스트를 띄우는 함수
 def overlay_text(text, timeout=2000):
     def make_overlay(text, timeout):
         root = tk.Tk()
@@ -47,22 +48,17 @@ def overlay_text(text, timeout=2000):
 
         # 라벨 생성 (패딩 포함)
         label = tk.Label(root, text=text, font=("Arial", 20), fg="white", bg="gray")
-        label.pack()  # 패딩 추가 (여백 설정)
-
-        root.update_idletasks()  # UI 업데이트 후 크기 반영
+        label.pack()  # 패킹
 
         # 창 크기 업데이트 후 실제 텍스트 크기 가져오기
         text_width = label.winfo_reqwidth()  # 라벨이 필요한 최소 너비
-
-        # 창 크기를 텍스트 크기에 맞게 조정 (여백 포함)
-        window_width = text_width + 20  # 좌우 여백 추가
 
         # 화면 크기 가져오기
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
 
         # 화면 아래쪽 7/8 지점에 배치
-        x_pos = (screen_width - window_width) // 2  # 가로 중앙 정렬
+        x_pos = (screen_width - text_width) // 2  # 가로 중앙 정렬
         y_pos = (screen_height * 7) // 8  # 세로 위치 (하단 7/8)
         root.geometry(f"+{x_pos}+{y_pos}")
 
@@ -80,8 +76,8 @@ if __name__ == '__main__':
     # welcome message
     overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000)
 
-    # pause 키 후킹. kill 함수 호출
-    keyboard.hook_key('pause', callback=kill)
+    # pause 키 후킹. terminate 함수 호출
+    keyboard.hook_key('pause', callback=terminate)
 
     while True:
         keyboard.wait('scroll lock')
