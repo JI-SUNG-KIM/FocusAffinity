@@ -1,4 +1,4 @@
-for AMD 7950x3d.
+for AMD 7950x3d.;
 Runs in the background
 
 Controls:
