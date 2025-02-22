@@ -3,6 +3,16 @@ from threading import Thread
 
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
 current_affinity_dict = dict()
+# 부스트 클럭 플래그
+boost = False
+
+# 현재 포커스된 프로세스의 이름을 가져오는 함수
+def get_process_name():
+    handle = win32gui.GetForegroundWindow()
+    tid, pid = win32process.GetWindowThreadProcessId(handle)
+    process_name = psutil.Process(pid).name()
+
+    return process_name
 
 # 프로세스의 CCD Affinity를 변경하는 함수
 def change_affinity(process):
@@ -24,16 +34,18 @@ def change_affinity(process):
     subprocess.run(["powershell", command], shell=True)
     overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
-# 현재 포커스된 프로세스의 이름을 가져오는 함수
-def get_process_name():
-    handle = win32gui.GetForegroundWindow()
-    tid, pid = win32process.GetWindowThreadProcessId(handle)
-    process_name = psutil.Process(pid).name()
+def toggle_boost(events = None):
+    global boost
+    # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d
+    command = "powercfg -S 9c78821f-7b0b-42d5-b670-55f60d15be8d" if boost else "powercfg -S 98edfa27-f7b3-44a1-8eb8-67634e2dcc52"
+    print(command)
+    subprocess.run(["powershell", command], shell=True)
+    overlay_text(f'Boost Clock {"Off" if boost else "On"}', 1000)
 
-    return process_name
+    boost = not boost
 
 # pause 키 후킹 시 호출되는 함수. 프로그램 종료
-def terminate(events):
+def terminate(events = None):
     overlay_text('pause key detected. ending program', 1500).join()
     os._exit(0)
 
@@ -78,11 +90,13 @@ if __name__ == '__main__':
 
     # pause 키 후킹. terminate 함수 호출
     keyboard.hook_key('pause', callback=terminate)
+    # ctrl + scroll lock 후킹. toggle_boost 함수 호출
+    keyboard.add_hotkey('ctrl+scroll lock', callback=toggle_boost)
 
     while True:
         keyboard.wait('scroll lock')
 
-        current_process_name =  get_process_name()
+        current_pSrocess_name =  get_process_name()
 
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
         if current_process_name == 'MuMuPlayer.exe':
