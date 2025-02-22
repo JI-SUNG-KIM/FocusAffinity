@@ -16,14 +16,12 @@ def change_affinity(process):
     affinty_list = [65535, 4294901760, 4294967295]
 
     # 프로세스의 CCD Affinity를 변경하는 파워쉘 명령어
-    command = f"""
-    Get-Process {process[:-4:]} | ForEach-Object {{
-    $_.ProcessorAffinity={affinty_list[current_affinity_dict[process]]}
-    }}
-    """
+    command = f"Get-Process {process[:-4:]} | ForEach-Object {{$_.ProcessorAffinity={affinty_list[current_affinity_dict[process]]}}}"
+
+    print(command)
 
     # 여기 shell=True가 없으면 pythonw로 돌릴 때 0.1초 정도 검은 창이 떴다가 사라지면서 포커스를 explore.exe가 가져감.
-    subprocess.run(["powershell", "-Command", command], shell=True)
+    subprocess.run(["powershell", command], shell=True)
     overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
 # 현재 포커스된 프로세스의 이름을 가져오는 함수
