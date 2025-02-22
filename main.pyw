@@ -96,7 +96,7 @@ if __name__ == '__main__':
     while True:
         keyboard.wait('scroll lock')
 
-        current_pSrocess_name =  get_process_name()
+        current_process_name =  get_process_name()
 
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
         if current_process_name == 'MuMuPlayer.exe':
