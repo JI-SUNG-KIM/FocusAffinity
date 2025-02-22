@@ -15,7 +15,7 @@ def get_process_name():
     return process_name
 
 # 프로세스의 CCD Affinity를 변경하는 함수
-def change_affinity(process):
+def change_affinity(process, show_overlay=True):
     # 프로세스가 딕셔너리에 없으면 추가하고 2로 초기화
     if process not in current_affinity_dict:
         current_affinity_dict[process] = 2
@@ -32,7 +32,8 @@ def change_affinity(process):
 
     # 여기 shell=True가 없으면 pythonw로 돌릴 때 0.1초 정도 검은 창이 떴다가 사라지면서 포커스를 explore.exe가 가져감.
     subprocess.run(["powershell", command], shell=True)
-    overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
+    if show_overlay:
+        overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
 # power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
 def toggle_boost(events = None):
@@ -45,14 +46,34 @@ def toggle_boost(events = None):
 
     boost = not boost
 
+# CCD Affinity 딕셔너리 출력
+def show_affinity_list(events = None):
+    msg = "--------------------------------\nCurrent Affinity List\n"
+    for key, value in current_affinity_dict.items():
+        # if value == 2:
+        #     continue
+        msg += f'{key}: {value}\n'
+    msg += '--------------------------------'
+    overlay_text(msg, 5000, 1/30, 1/2)
+
+def reset_affinity(events = None):
+    for key, value in current_affinity_dict.items():
+        if value == 2:
+            current_affinity_dict.pop(key)
+            continue
+        current_affinity_dict[key] = 1
+        change_affinity(key, False)
+    overlay_text('All Affinity Reset', 1000).join()
+    current_affinity_dict.clear()
+
 # pause 키 후킹 시 호출되는 함수. 프로그램 종료
 def terminate(events = None):
     overlay_text('pause key detected. ending program', 1500).join()
     os._exit(0)
 
 # 오버레이 텍스트를 띄우는 함수
-def overlay_text(text, timeout=2000):
-    def make_overlay(text, timeout):
+def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
+    def make_overlay():
         root = tk.Tk()
 
         root.overrideredirect(True)  # 창 프레임 제거 (타이틀 바 없음)
@@ -71,8 +92,8 @@ def overlay_text(text, timeout=2000):
         screen_height = root.winfo_screenheight()
 
         # 화면 아래쪽 7/8 지점에 배치
-        x_pos = (screen_width - text_width) // 2  # 가로 중앙 정렬
-        y_pos = (screen_height * 7) // 8  # 세로 위치 (하단 7/8)
+        x_pos = int((screen_width - text_width) * x_ratio)  # 가로 중앙 정렬
+        y_pos = int(screen_height * y_ratio)  # 세로 위치 (하단 7/8)
         root.geometry(f"+{x_pos}+{y_pos}")
 
         root.after(timeout, root.destroy)
@@ -80,19 +101,23 @@ def overlay_text(text, timeout=2000):
 
     # 내부적으로 쓰레드를 통해 오버레이를 띄움. timeout 시간동안 프로그램이 멈추던 것을 해결. 이제 오버레이가 떠있는 중간에도 프로그램이 동작함.
     # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버레이를 유지할 수 있음.
-    th = Thread(target=make_overlay, args=(text, timeout), daemon=True)
+    th = Thread(target=make_overlay, daemon=True)
     th.start()
     print(text) # 매번 overlay_text랑 print랑 같이 써야하는게 귀찮아서 여기서 print도 같이 해줌.
     return th
 
 if __name__ == '__main__':
     # welcome message
-    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000)
+    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000).join()
 
+    # shift + scroll lock 후킹. toggle_boost 함수 호출
+    keyboard.add_hotkey('shift+scroll lock', callback=toggle_boost)
+    # ctrl + shift + scroll lock 후킹. show_affinity_list 함수 호출
+    keyboard.add_hotkey('ctrl+shift+scroll lock', callback=show_affinity_list)
     # pause 키 후킹. terminate 함수 호출
-    keyboard.hook_key('pause', callback=terminate)
-    # ctrl + scroll lock 후킹. toggle_boost 함수 호출
-    keyboard.add_hotkey('ctrl+scroll lock', callback=toggle_boost)
+    keyboard.add_hotkey('pause', callback=terminate)
+    # shift + pause 후킹. reset_affinity
+    keyboard.add_hotkey('shift+pause', callback=reset_affinity)
 
     while True:
         keyboard.wait('scroll lock')
