@@ -34,6 +34,7 @@ def change_affinity(process):
     subprocess.run(["powershell", command], shell=True)
     overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
+# power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
 def toggle_boost(events = None):
     global boost
     # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d, 100% = 98edfa27-f7b3-44a1-8eb8-67634e2dcc52
@@ -56,7 +57,7 @@ def overlay_text(text, timeout=2000):
 
         root.overrideredirect(True)  # 창 프레임 제거 (타이틀 바 없음)
         root.attributes("-topmost", True)  # 항상 위에 표시
-        root.attributes("-alpha", 0.7)  # 창 투명도 설정 (0.0 = 완전 투명, 1.0 = 불투명)
+        root.attributes("-alpha", 0.8)  # 창 투명도 설정 (0.0 = 완전 투명, 1.0 = 불투명)
 
         # 라벨 생성 (패딩 포함)
         label = tk.Label(root, text=text, font=("Arial", 20), fg="white", bg="gray")
