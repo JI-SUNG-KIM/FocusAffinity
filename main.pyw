@@ -36,7 +36,7 @@ def change_affinity(process):
 
 def toggle_boost(events = None):
     global boost
-    # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d
+    # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d, 100% = 98edfa27-f7b3-44a1-8eb8-67634e2dcc52
     command = "powercfg -S 9c78821f-7b0b-42d5-b670-55f60d15be8d" if boost else "powercfg -S 98edfa27-f7b3-44a1-8eb8-67634e2dcc52"
     print(command)
     subprocess.run(["powershell", command], shell=True)
