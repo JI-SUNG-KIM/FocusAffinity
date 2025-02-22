@@ -16,7 +16,7 @@ def get_process_name():
 
 # called by 'scroll lock'
 # 프로세스의 CCD Affinity를 변경
-def change_affinity(process, show_overlay=True):
+def switch_affinity(process, show_overlay=True):
     # 프로세스가 딕셔너리에 없으면 추가하고 2로 초기화
     if process not in current_affinity_dict:
         current_affinity_dict[process] = 2
@@ -67,7 +67,7 @@ def reset_affinity(events = None):
             current_affinity_dict.pop(key)
             continue
         current_affinity_dict[key] = 1
-        change_affinity(key, False)
+        switch_affinity(key, False)
     overlay_text('All Affinity Reset', 1000).join()
     current_affinity_dict.clear()
 
@@ -125,8 +125,8 @@ if __name__ == '__main__':
         keyboard.wait('scroll lock')
 
         current_process_name =  get_process_name()
-        change_affinity(current_process_name)
+        switch_affinity(current_process_name)
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
         if current_process_name == 'MuMuPlayer.exe':
-            change_affinity('MuMuVMMHeadless.exe', False)
-            change_affinity('MuMuVMMSVC.exe', False)
+            switch_affinity('MuMuVMMHeadless.exe', False)
+            switch_affinity('MuMuVMMSVC.exe', False)
