@@ -1,5 +1,8 @@
-import keyboard, win32gui, win32process, psutil, subprocess, os, tkinter as tk
+import keyboard
+import win32gui, win32process, psutil
+import subprocess, tkinter as tk
 from threading import Thread
+import os
 
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
 current_affinity_dict = dict()
