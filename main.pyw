@@ -9,15 +9,17 @@ current_affinity_dict = dict()
 # 부스트 클럭 플래그
 boost = False
 
+# 현재 포커스된 프로세스의 PID 반환
 def get_focused_pid():
     handle = win32gui.GetForegroundWindow()
     tid, pid = win32process.GetWindowThreadProcessId(handle)
     return pid
 
-# 현재 포커스된 프로세스의 이름을 반환
+# PID로 프로세스 이름 반환
 def get_process_name(pid):
     return psutil.Process(pid).name()
 
+# PID로 프로세스의 CCD Affinity를 반환
 def get_affinity(pid):
     bitmask = 0
     for core in psutil.Process(pid).cpu_affinity():
