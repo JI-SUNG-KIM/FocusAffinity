@@ -7,7 +7,7 @@ import os
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
 current_affinity_dict = dict()
 # 부스트 클럭 플래그
-boost = False
+BOOST = False
 
 # 현재 포커스된 프로세스의 PID 반환
 def get_focused_pid():
@@ -58,14 +58,14 @@ def switch_affinity(pid, show_overlay=True):
 # called by 'shift+scroll lock'
 # power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
 def toggle_boost(events = None):
-    global boost
+    global BOOST
     # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d, 100% = 98edfa27-f7b3-44a1-8eb8-67634e2dcc52
-    command = "powercfg -S 9c78821f-7b0b-42d5-b670-55f60d15be8d" if boost else "powercfg -S 98edfa27-f7b3-44a1-8eb8-67634e2dcc52"
+    command = "powercfg -S 9c78821f-7b0b-42d5-b670-55f60d15be8d" if BOOST else "powercfg -S 98edfa27-f7b3-44a1-8eb8-67634e2dcc52"
     print(command)
     subprocess.run(["powershell", command], shell=True)
-    overlay_text(f'Boost Clock {"Off" if boost else "On"}', 1000)
+    overlay_text(f'Boost Clock {"Off" if BOOST else "On"}', 1000)
 
-    boost = not boost
+    BOOST = not BOOST
 
 # called by 'ctrl+shift+scroll lock'
 # CCD Affinity 딕셔너리 오버레이 출력
