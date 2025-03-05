@@ -22,7 +22,7 @@ def get_affinity(pid):
     bitmask = 0
     for core in psutil.Process(pid).cpu_affinity():
         bitmask |= (1 << core)  # 2^core를 더함
-    print('bitmast : ', bitmask)
+    print('bitmask : ', bitmask)
     return bitmask
 
 # called by 'scroll lock'
@@ -32,10 +32,14 @@ def switch_affinity(pid, show_overlay=True):
     # CCD Affinity 리스트 (CCD0, CCD1, all CCD)
     affinty_list = [65535, 4294901760, 4294967295]
 
-    print('affinty_list.index(get_affinity(pid)) : ', affinty_list.index(get_affinity(pid)))
-    # 프로세스가 딕셔너리에 없으면 추가하고 asdf로 초기화
+    # print('affinty_list.index(get_affinity(pid)) : ', affinty_list.index(get_affinity(pid)))
+    # 프로세스가 딕셔너리에 없으면 기존 affinity로 추가. affinity가 좀 특이하면 걍 2로 취급.
     if process not in current_affinity_dict:
-        current_affinity_dict[process] = affinty_list.index(get_affinity(pid))
+        cur_aff = get_affinity(pid)
+        if cur_aff in affinty_list:
+            current_affinity_dict[process] = affinty_list.index(cur_aff)
+        else:
+            current_affinity_dict[process] = 2
     # 프로세스가 2보다 작으면 1을 더하고 아니면 -2를 더함(== 2를 뺌)
     current_affinity_dict[process] += 1 if current_affinity_dict[process] < 2 else -2
 
