@@ -6,25 +6,35 @@ current_affinity_dict = dict()
 # 부스트 클럭 플래그
 boost = False
 
-# 현재 포커스된 프로세스의 이름을 반환
-def get_process_name():
+def get_focused_pid():
     handle = win32gui.GetForegroundWindow()
     tid, pid = win32process.GetWindowThreadProcessId(handle)
-    process_name = psutil.Process(pid).name()
+    return pid
 
-    return process_name
+# 현재 포커스된 프로세스의 이름을 반환
+def get_process_name(pid):
+    return psutil.Process(pid).name()
+
+def get_affinity(pid):
+    bitmask = 0
+    for core in psutil.Process(pid).cpu_affinity():
+        bitmask |= (1 << core)  # 2^core를 더함
+    print('bitmast : ', bitmask)
+    return bitmask
 
 # called by 'scroll lock'
 # 프로세스의 CCD Affinity를 변경
-def switch_affinity(process, show_overlay=True):
-    # 프로세스가 딕셔너리에 없으면 추가하고 2로 초기화
-    if process not in current_affinity_dict:
-        current_affinity_dict[process] = 2
-    # 프로세스가 2보다 작으면 1을 더하고 아니면 -2를 더함(== 2를 뺌)
-    current_affinity_dict[process] += 1 if current_affinity_dict[process] < 2 else -2
-
+def switch_affinity(pid, show_overlay=True):
+    process = get_process_name(pid)
     # CCD Affinity 리스트 (CCD0, CCD1, all CCD)
     affinty_list = [65535, 4294901760, 4294967295]
+
+    print('affinty_list.index(get_affinity(pid)) : ', affinty_list.index(get_affinity(pid)))
+    # 프로세스가 딕셔너리에 없으면 추가하고 asdf로 초기화
+    if process not in current_affinity_dict:
+        current_affinity_dict[process] = affinty_list.index(get_affinity(pid))
+    # 프로세스가 2보다 작으면 1을 더하고 아니면 -2를 더함(== 2를 뺌)
+    current_affinity_dict[process] += 1 if current_affinity_dict[process] < 2 else -2
 
     # 프로세스의 CCD Affinity를 변경하는 파워쉘 명령어
     command = f"Get-Process {process[:-4:]} | ForEach-Object {{$_.ProcessorAffinity={affinty_list[current_affinity_dict[process]]}}}"
@@ -124,9 +134,9 @@ if __name__ == '__main__':
     while True:
         keyboard.wait('scroll lock')
 
-        current_process_name =  get_process_name()
-        switch_affinity(current_process_name)
+        current_process_pid = get_focused_pid()
+        switch_affinity(current_process_pid)
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
-        if current_process_name == 'MuMuPlayer.exe':
+        if get_process_name(current_process_pid) == 'MuMuPlayer.exe':
             switch_affinity('MuMuVMMHeadless.exe', False)
             switch_affinity('MuMuVMMSVC.exe', False)
