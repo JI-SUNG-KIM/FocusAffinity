@@ -10,34 +10,29 @@ current_affinity_dict = dict()
 BOOST = False
 
 # 현재 포커스된 프로세스의 PID 반환
-def get_focused_pid():
+def get_focused_name():
     handle = win32gui.GetForegroundWindow()
     tid, pid = win32process.GetWindowThreadProcessId(handle)
-    return pid
-
-# PID로 프로세스 이름 반환
-def get_process_name(pid):
     return psutil.Process(pid).name()
 
 # PID로 프로세스의 CCD Affinity를 반환
-def get_affinity(pid):
+def get_affinity(process):
+    pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name']) if p.info['name'] == process]
     bitmask = 0
-    for core in psutil.Process(pid).cpu_affinity():
+    for core in psutil.Process(pids[0]).cpu_affinity():
         bitmask |= (1 << core)  # 2^core를 더함
     print('bitmask : ', bitmask)
     return bitmask
 
 # called by 'scroll lock'
 # 프로세스의 CCD Affinity를 변경
-def switch_affinity(pid, show_overlay=True):
-    process = get_process_name(pid)
+def switch_affinity(process, show_overlay=True):
     # CCD Affinity 리스트 (CCD0, CCD1, all CCD)
     affinty_list = [65535, 4294901760, 4294967295]
 
-    # print('affinty_list.index(get_affinity(pid)) : ', affinty_list.index(get_affinity(pid)))
     # 프로세스가 딕셔너리에 없으면 기존 affinity로 추가. affinity가 좀 특이하면 걍 2로 취급.
     if process not in current_affinity_dict:
-        cur_aff = get_affinity(pid)
+        cur_aff = get_affinity(process)
         if cur_aff in affinty_list:
             current_affinity_dict[process] = affinty_list.index(cur_aff)
         else:
@@ -133,7 +128,7 @@ def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
 
 if __name__ == '__main__':
     # welcome message
-    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 4000).join()
+    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 3000).join()
 
     keyboard.add_hotkey('shift+scroll lock', callback=toggle_boost)
     keyboard.add_hotkey('ctrl+shift+scroll lock', callback=show_affinity_list)
@@ -143,9 +138,9 @@ if __name__ == '__main__':
     while True:
         keyboard.wait('scroll lock')
 
-        current_process_pid = get_focused_pid()
-        switch_affinity(current_process_pid)
+        current_process_name = get_focused_name()
+        switch_affinity(current_process_name)
         # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
-        if get_process_name(current_process_pid) == 'MuMuPlayer.exe':
-            switch_affinity('MuMuVMMHeadless.exe', False)
-            switch_affinity('MuMuVMMSVC.exe', False)
+        if current_process_name == 'MuMuPlayer.exe':
+            switch_affinity("MuMuVMMHeadless.exe", False)
+            switch_affinity("MuMuVMMSVC.exe", False)
