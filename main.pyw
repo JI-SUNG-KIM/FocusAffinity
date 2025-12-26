@@ -9,10 +9,10 @@ current_affinity_dict = dict()
 # 부스트 클럭 플래그
 BOOST = False
 
-# 현재 포커스된 프로세스의 PID 반환
+# 현재 포커스된 프로세스의 이름 반환
 def get_focused_name():
     handle = win32gui.GetForegroundWindow()
-    tid, pid = win32process.GetWindowThreadProcessId(handle)
+    _, pid = win32process.GetWindowThreadProcessId(handle)
     return psutil.Process(pid).name()
 
 # PID로 프로세스의 CCD Affinity를 반환
