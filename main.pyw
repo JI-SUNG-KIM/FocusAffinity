@@ -1,61 +1,106 @@
 import keyboard
-import win32gui, win32process, psutil
+
+import psutil
 import subprocess, tkinter as tk
 from threading import Thread
 import os
+import ctypes
+
+from pystray import Icon, Menu, MenuItem
+from PIL import Image, ImageDraw
+
+import re
+
 
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
 current_affinity_dict = dict()
+
 # 부스트 클럭 플래그
 BOOST = False
+POWER_PLAN = ("9c78821f-7b0b-42d5-b670-55f60d15be8d", "98edfa27-f7b3-44a1-8eb8-67634e2dcc52")
+
+# Affinity Masks (Ryzen 9 5950X/7950X setup: 16 cores, 32 threads)
+CCD0_MASK = 0xFFFF          # 0-15
+CCD1_MASK = 0xFFFF0000      # 16-31
+ALL_MASK = 0xFFFFFFFF       # 0-31
+AFFINITY_LIST = (CCD0_MASK, CCD1_MASK, ALL_MASK)
+
+def mask_to_cpus(mask):
+    return [i for i in range(32) if (mask >> i) & 1]
 
 # 현재 포커스된 프로세스의 이름 반환
 def get_focused_name():
-    handle = win32gui.GetForegroundWindow()
-    _, pid = win32process.GetWindowThreadProcessId(handle)
-    return psutil.Process(pid).name()
+    hwnd = ctypes.windll.user32.GetForegroundWindow()
+    if not hwnd:
+        return None
+    pid = ctypes.c_ulong()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    try:
+        return psutil.Process(pid.value).name()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return None
 
-# PID로 프로세스의 CCD Affinity를 반환
-def get_affinity(process):
-    pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name']) if p.info['name'] == process]
-    bitmask = 0
-    for core in psutil.Process(pids[0]).cpu_affinity():
-        bitmask |= (1 << core)  # 2^core를 더함
-    print('bitmask : ', bitmask)
-    return bitmask
+# 프로세스 이름으로 현재 Affinity Bitmask 반환
+def get_affinity_mask(process_name):
+    for p in psutil.process_iter(['name', 'cpu_affinity']):
+        if p.info['name'] == process_name:
+            mask = 0
+            for core in p.info['cpu_affinity']:
+                mask |= (1 << core)
+            return mask
+    return ALL_MASK
 
 # called by 'scroll lock'
 # 프로세스의 CCD Affinity를 변경
 def switch_affinity(process, show_overlay=True):
-    # CCD Affinity 리스트 (CCD0, CCD1, all CCD)
-    affinty_list = [65535, 4294901760, 4294967295]
+    if not process:
+        return
 
     # 프로세스가 딕셔너리에 없으면 기존 affinity로 추가. affinity가 좀 특이하면 걍 2로 취급.
     if process not in current_affinity_dict:
-        cur_aff = get_affinity(process)
-        if cur_aff in affinty_list:
-            current_affinity_dict[process] = affinty_list.index(cur_aff)
+        cur_aff = get_affinity_mask(process)
+        if cur_aff in AFFINITY_LIST:
+            current_affinity_dict[process] = AFFINITY_LIST.index(cur_aff)
         else:
             current_affinity_dict[process] = 2
-    # 프로세스가 2보다 작으면 1을 더하고 아니면 -2를 더함(== 2를 뺌)
-    current_affinity_dict[process] += 1 if current_affinity_dict[process] < 2 else -2
 
-    # 프로세스의 CCD Affinity를 변경하는 파워쉘 명령어
-    command = f"Get-Process {process[:-4:]} | ForEach-Object {{$_.ProcessorAffinity={affinty_list[current_affinity_dict[process]]}}}"
+    # Cycle index: 0 -> 1 -> 2 -> 0
+    current_affinity_dict[process] = (current_affinity_dict[process] + 1) % 3
+    
+    target_mask = AFFINITY_LIST[current_affinity_dict[process]]
+    target_cpus = mask_to_cpus(target_mask)
 
-    print(command)
+    # psutil을 사용하여 Affinity 변경 (PowerShell 제거)
+    count = 0
+    for p in psutil.process_iter(['name']):
+        if p.info['name'] == process:
+            try:
+                p.cpu_affinity(target_cpus)
+                count += 1
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                pass
 
-    # 여기 shell=True가 없으면 pythonw로 돌릴 때 0.1초 정도 검은 창이 떴다가 사라지면서 포커스를 explore.exe가 가져감.
-    subprocess.run(["powershell", command], shell=True)
+    if AFFINITY_LIST.index(get_affinity_mask(process)) == current_affinity_dict[process]:
+        print(f"Set {process} to mask {target_mask} (Count: {count})")
+    else:
+        print(f"Failed to set {process} to mask {target_mask} (Count: {count})")
+        current_affinity_dict[process] = (current_affinity_dict[process] + 2) % 3
+
     if show_overlay:
         overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
+
+# return guid of current power plan
+def get_current_power_plan():
+    result = subprocess.check_output(["powercfg", "/getactivescheme"], text=True, encoding="cp949")
+    guid = re.search(r'GUID:\s*([a-f0-9\-]+)', result, re.I).group(1)
+    return guid
 
 # called by 'shift+scroll lock'
 # power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
 def toggle_boost(events = None):
     global BOOST
-    # 99% = 9c78821f-7b0b-42d5-b670-55f60d15be8d, 100% = 98edfa27-f7b3-44a1-8eb8-67634e2dcc52
-    command = "powercfg -S 9c78821f-7b0b-42d5-b670-55f60d15be8d" if BOOST else "powercfg -S 98edfa27-f7b3-44a1-8eb8-67634e2dcc52"
+
+    command = f"powercfg -S {POWER_PLAN[not BOOST]}"
     print(command)
     subprocess.run(["powershell", command], shell=True)
     overlay_text(f'Boost Clock {"Off" if BOOST else "On"}', 1000)
@@ -65,31 +110,17 @@ def toggle_boost(events = None):
 # called by 'ctrl+shift+scroll lock'
 # CCD Affinity 딕셔너리 오버레이 출력
 def show_affinity_list(events = None):
-    msg = "--------------------------------\nCurrent Affinity List\n"
+    msg = "--------------------------------\nCurrent Power Plan\n"
+    msg += "Base" if POWER_PLAN.index(get_current_power_plan()) == 0 else "Boost"
+    msg += "\n"
+    
+    msg += "--------------------------------\nCurrent Affinity List\n"
     for key, value in current_affinity_dict.items():
         # if value == 2:
         #     continue
         msg += f'{key}: {value}\n'
     msg += '--------------------------------'
     overlay_text(msg, 5000, 1/30, 1/2)
-
-# called by 'shift+pause'
-# 모든 프로세스의 CCD Affinity를 초기화
-def reset_affinity(events = None):
-    for key, value in current_affinity_dict.items():
-        if value == 2:
-            current_affinity_dict.pop(key)
-            continue
-        current_affinity_dict[key] = 1
-        switch_affinity(key, False)
-    overlay_text('All Affinity Reset', 1000).join()
-    current_affinity_dict.clear()
-
-# called by 'pause'
-# 프로그램 종료
-def terminate(events = None):
-    overlay_text('pause key detected. ending program', 1500).join()
-    os._exit(0)
 
 # 오버레이 텍스트를 띄우는 함수
 def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
@@ -126,21 +157,57 @@ def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
     print(text) # 매번 overlay_text랑 print랑 같이 써야하는게 귀찮아서 여기서 print도 같이 해줌.
     return th
 
-if __name__ == '__main__':
-    # welcome message
-    overlay_text('Change Core Affinity of focused program with "Scroll Lock"\nTerminate with "Pause" key', 3000).join()
+# for Tray Icon Image
+def create_image():
+    # 아이콘 이미지 생성 (64x64)
+    image = Image.new('RGB', (64, 64), color='white')
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 16, 48, 48), fill='black')
+    return image
 
+# Tray menu "exit"
+def tray_menu_quit(icon, item):
+    icon.stop()
+    overlay_text('Terminating this program...', 1500).join()
+    os._exit(0)
+
+def tray_menu_reset(icon, item):
+    for key, value in list(current_affinity_dict.items()):
+        if value == 2:
+            current_affinity_dict.pop(key)
+            continue
+        current_affinity_dict[key] = 1
+        switch_affinity(key, False)
+    overlay_text('All Affinity Reset', 1000).join()
+    current_affinity_dict.clear()
+
+def tray_munu_keys(icon, item):
+    overlay_text('scroll lock: switch affinity\n' \
+    'shift+scroll lock: toggle boost\n' \
+    'ctrl+shift+scroll lock: show affinity list' 
+    , 4000)
+
+def main():
+    # welcome message
+    BOOST = POWER_PLAN.index(get_current_power_plan())
+    overlay_text('Focus Affinity\nStarting Program...', 3000).join()
+    
+    keyboard.add_hotkey('scroll lock', lambda: switch_affinity(get_focused_name()))
     keyboard.add_hotkey('shift+scroll lock', callback=toggle_boost)
     keyboard.add_hotkey('ctrl+shift+scroll lock', callback=show_affinity_list)
-    keyboard.add_hotkey('pause', callback=terminate)
-    keyboard.add_hotkey('shift+pause', callback=reset_affinity)
 
-    while True:
-        keyboard.wait('scroll lock')
+    icon = Icon(
+    "test_tray",
+    create_image(),
+    menu=Menu(
+        MenuItem("Show Affinity List", lambda i, it: Thread(target=show_affinity_list).start()),
+        MenuItem("Reset Affinity Settings", lambda i, it: Thread(target=tray_menu_reset, args=(i, it)).start()),
+        MenuItem("Keys", lambda i, it: Thread(target=tray_munu_keys, args=(i, it)).start()),
+        MenuItem("Exit", lambda i, it: Thread(target=tray_menu_quit, args=(i, it)).start())
+        )
+    )
 
-        current_process_name = get_focused_name()
-        switch_affinity(current_process_name)
-        # 뮤뮤 플레이어의 경우 뮤뮤 플레이어 헤드리스도 함께 변경. 이 싸가지 없는 새끼는 대가리스가 메인임.
-        if current_process_name == 'MuMuPlayer.exe':
-            switch_affinity("MuMuVMMHeadless.exe", False)
-            switch_affinity("MuMuVMMSVC.exe", False)
+    icon.run()
+
+if __name__ == '__main__':
+    main()
