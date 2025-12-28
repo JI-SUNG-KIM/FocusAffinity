@@ -13,6 +13,7 @@ import re
 
 
 # 프로그램 별 CCD Affinity를 저장하는 딕셔너리
+# process_name: 0 or 1 or 2
 current_affinity_dict = dict()
 
 # 부스트 클럭 플래그
@@ -50,7 +51,57 @@ def get_affinity_mask(process_name):
             return mask
     return ALL_MASK
 
+# return guid of current power plan
+def get_current_power_plan():
+    result = subprocess.check_output(["powercfg", "/getactivescheme"], text=True, encoding="cp949")
+    guid = re.search(r'GUID:\s*([a-f0-9\-]+)', result, re.I).group(1)
+    return guid
+
+# 오버레이 텍스트를 띄우는 함수
+def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
+    def make_overlay():
+        root = tk.Tk()
+
+        root.overrideredirect(True)  # 창 프레임 제거 (타이틀 바 없음)
+        root.attributes("-topmost", True)  # 항상 위에 표시
+        root.attributes("-alpha", 0.8)  # 창 투명도 설정 (0.0 = 완전 투명, 1.0 = 불투명)
+
+        # 라벨 생성 (패딩 포함)
+        label = tk.Label(root, text=text, font=("Arial", 20), fg="white", bg="gray")
+        label.pack()  # 패킹
+
+        # 창 크기 업데이트 후 실제 텍스트 크기 가져오기
+        text_width = label.winfo_reqwidth()  # 라벨이 필요한 최소 너비
+
+        # 화면 크기 가져오기
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+
+        # 화면 아래쪽 7/8 지점에 배치
+        x_pos = int((screen_width - text_width) * x_ratio)  # 가로 중앙 정렬
+        y_pos = int(screen_height * y_ratio)  # 세로 위치 (하단 7/8)
+        root.geometry(f"+{x_pos}+{y_pos}")
+
+        root.after(timeout, root.destroy)
+        root.mainloop()
+
+    # 내부적으로 쓰레드를 통해 오버레이를 띄움. timeout 시간동안 프로그램이 멈추던 것을 해결. 이제 오버레이가 떠있는 중간에도 프로그램이 동작함.
+    # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버레이를 유지할 수 있음.
+    th = Thread(target=make_overlay, daemon=True)
+    th.start()
+    print(text) # 매번 overlay_text랑 print랑 같이 써야하는게 귀찮아서 여기서 print도 같이 해줌.
+    return th
+
+########################################################################################################
+
 # called by 'scroll lock'
+def show_current_affinity(process):
+    if process not in current_affinity_dict:
+        overlay_text(f"{process} is not in the list", 1000)
+    else:
+        overlay_text(f'"{process}" is on CCD{current_affinity_dict[process]}', 1000)
+
+# called by 'shift+scroll lock'
 # 프로세스의 CCD Affinity를 변경
 def switch_affinity(process, show_overlay=True):
     if not process:
@@ -89,15 +140,9 @@ def switch_affinity(process, show_overlay=True):
     if show_overlay:
         overlay_text(f'"{process}" is now on CCD"{current_affinity_dict[process]}"', 1000)
 
-# return guid of current power plan
-def get_current_power_plan():
-    result = subprocess.check_output(["powercfg", "/getactivescheme"], text=True, encoding="cp949")
-    guid = re.search(r'GUID:\s*([a-f0-9\-]+)', result, re.I).group(1)
-    return guid
-
-# called by 'shift+scroll lock'
+# called by 'ctrl+shift+scroll lock'
 # power plan을 변경하여 CPU 부스트 클럭을 토글하는 함수
-def toggle_boost(events = None):
+def toggle_boost():
     global BOOST
 
     command = f"powercfg -S {POWER_PLAN[not BOOST]}"
@@ -107,9 +152,20 @@ def toggle_boost(events = None):
 
     BOOST = not BOOST
 
-# called by 'ctrl+shift+scroll lock'
+
+########################################################################################################
+
+# for Tray Icon Image
+def create_image():
+    # 아이콘 이미지 생성 (64x64)
+    image = Image.new('RGB', (64, 64), color='white')
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((16, 16, 48, 48), fill='black')
+    return image
+
 # CCD Affinity 딕셔너리 오버레이 출력
-def show_affinity_list(events = None):
+# Tray menu "Show Affinity List"
+def tray_show_affinity_list():
     msg = "--------------------------------\nCurrent Power Plan\n"
     msg += "Base" if POWER_PLAN.index(get_current_power_plan()) == 0 else "Boost"
     msg += "\n"
@@ -122,56 +178,8 @@ def show_affinity_list(events = None):
     msg += '--------------------------------'
     overlay_text(msg, 5000, 1/30, 1/2)
 
-# 오버레이 텍스트를 띄우는 함수
-def overlay_text(text, timeout=2000, x_ratio=1/2, y_ratio=7/8):
-    def make_overlay():
-        root = tk.Tk()
-
-        root.overrideredirect(True)  # 창 프레임 제거 (타이틀 바 없음)
-        root.attributes("-topmost", True)  # 항상 위에 표시
-        root.attributes("-alpha", 0.8)  # 창 투명도 설정 (0.0 = 완전 투명, 1.0 = 불투명)
-
-        # 라벨 생성 (패딩 포함)
-        label = tk.Label(root, text=text, font=("Arial", 20), fg="white", bg="gray")
-        label.pack()  # 패킹
-
-        # 창 크기 업데이트 후 실제 텍스트 크기 가져오기
-        text_width = label.winfo_reqwidth()  # 라벨이 필요한 최소 너비
-
-        # 화면 크기 가져오기
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-
-        # 화면 아래쪽 7/8 지점에 배치
-        x_pos = int((screen_width - text_width) * x_ratio)  # 가로 중앙 정렬
-        y_pos = int(screen_height * y_ratio)  # 세로 위치 (하단 7/8)
-        root.geometry(f"+{x_pos}+{y_pos}")
-
-        root.after(timeout, root.destroy)
-        root.mainloop()
-
-    # 내부적으로 쓰레드를 통해 오버레이를 띄움. timeout 시간동안 프로그램이 멈추던 것을 해결. 이제 오버레이가 떠있는 중간에도 프로그램이 동작함.
-    # th로 쓰레드를 만들어 반환함. 호출한 곳에서 필요시 .join()으로 timeout 시간동안 오버레이를 유지할 수 있음.
-    th = Thread(target=make_overlay, daemon=True)
-    th.start()
-    print(text) # 매번 overlay_text랑 print랑 같이 써야하는게 귀찮아서 여기서 print도 같이 해줌.
-    return th
-
-# for Tray Icon Image
-def create_image():
-    # 아이콘 이미지 생성 (64x64)
-    image = Image.new('RGB', (64, 64), color='white')
-    draw = ImageDraw.Draw(image)
-    draw.rectangle((16, 16, 48, 48), fill='black')
-    return image
-
-# Tray menu "exit"
-def tray_menu_quit(icon, item):
-    icon.stop()
-    overlay_text('Terminating this program...', 1500).join()
-    os._exit(0)
-
-def tray_menu_reset(icon, item):
+# Tray menu "Reset All Affinity Settings"
+def tray_menu_reset():
     for key, value in list(current_affinity_dict.items()):
         if value == 2:
             current_affinity_dict.pop(key)
@@ -181,29 +189,39 @@ def tray_menu_reset(icon, item):
     overlay_text('All Affinity Reset', 1000).join()
     current_affinity_dict.clear()
 
-def tray_munu_keys(icon, item):
+# Tray menu "Keys"
+def tray_munu_keys():
     overlay_text('scroll lock: switch affinity\n' \
     'shift+scroll lock: toggle boost\n' \
     'ctrl+shift+scroll lock: show affinity list' 
     , 4000)
 
+# Tray menu "Exit"
+def tray_menu_quit(icon):
+    icon.stop()
+    overlay_text('Terminating this program...', 1500).join()
+    os._exit(0)
+
+########################################################################################################
+
 def main():
     # welcome message
     BOOST = POWER_PLAN.index(get_current_power_plan())
-    overlay_text('Focus Affinity\nStarting Program...', 3000).join()
+    overlay_text('Focus Affinity\nStarting Program...', 2000).join()
     
-    keyboard.add_hotkey('scroll lock', lambda: switch_affinity(get_focused_name()))
-    keyboard.add_hotkey('shift+scroll lock', callback=toggle_boost)
-    keyboard.add_hotkey('ctrl+shift+scroll lock', callback=show_affinity_list)
+    keyboard.add_hotkey('scroll lock', callback=lambda: show_current_affinity(get_focused_name()))
+    keyboard.add_hotkey('shift+scroll lock', callback=lambda: switch_affinity(get_focused_name()))
+    keyboard.add_hotkey('ctrl+shift+scroll lock', callback=toggle_boost)
 
     icon = Icon(
-    "test_tray",
-    create_image(),
-    menu=Menu(
-        MenuItem("Show Affinity List", lambda i, it: Thread(target=show_affinity_list).start()),
-        MenuItem("Reset Affinity Settings", lambda i, it: Thread(target=tray_menu_reset, args=(i, it)).start()),
-        MenuItem("Keys", lambda i, it: Thread(target=tray_munu_keys, args=(i, it)).start()),
-        MenuItem("Exit", lambda i, it: Thread(target=tray_menu_quit, args=(i, it)).start())
+        "Focus_Affinity_JS",
+        create_image(),
+        "Focus Affinity",
+        menu=Menu(
+            MenuItem("Show Affinity List", lambda icon, item: Thread(target=tray_show_affinity_list).start()),
+            MenuItem("Reset All Affinity Settings", lambda icon, item: Thread(target=tray_menu_reset).start()),
+            MenuItem("Keys", lambda icon, item: Thread(target=tray_munu_keys).start()),
+            MenuItem("Exit", lambda icon, item: Thread(target=tray_menu_quit, args=(icon,)).start())
         )
     )
 
